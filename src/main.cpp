@@ -4,6 +4,7 @@
 #include <cmath> // for sqrt
 
 #include <SFML/Graphics.hpp>
+#include <SFML/Window/Keyboard.hpp>
 
 const int WINDOW_WIDTH = 800;
 const int WINDOW_HEIGHT = 800;
@@ -68,31 +69,53 @@ int findClosestControlPoint(const std::vector<sf::Vector2f>& pts, Point2D mouse)
 
 // TODO: (Part 1) Define a function that samples a cubic Bezier curve at t in [0, 1].
 Point2D getPoint(const std::vector<sf::Vector2f>& pts, float t) { 
+    // Find which segment t falls in, and resize t to [0,1]
+    int numSegments = (static_cast<int>(pts.size()) - 1) / 3;
+    float scaled = t * numSegments;
+    int seg = static_cast<int>(scaled);
+    if (seg >= numSegments) {
+        // when t == 1
+        seg = numSegments - 1;
+    }
+    float localT = scaled - seg;
+    int base = seg * 3;
+    
     // B(t) = (1−t)^3xP0 + 3(1−t)^2txP1 + 3(1−t)t^2xP2 + t^3xP3
-    float u = 1.0f - t;
+    float u = 1.0f - localT;
 
     float b0 = u * u * u;
-    float b1 = 3.0f * u * u * t;
-    float b2 = 3.0f * u * t * t;
-    float b3 = t * t * t;
+    float b1 = 3.0f * u * u * localT;
+    float b2 = 3.0f * u * localT * localT;
+    float b3 = localT * localT * localT;
 
     return Point2D{
-        b0 * pts[0].x + b1 * pts[1].x + b2 * pts[2].x + b3 * pts[3].x,
-        b0 * pts[0].y + b1 * pts[1].y + b2 * pts[2].y + b3 * pts[3].y
+        b0 * pts[base].x + b1 * pts[base + 1].x + b2 * pts[base + 2].x + b3 * pts[base + 3].x,
+        b0 * pts[base].y + b1 * pts[base + 1].y + b2 * pts[base + 2].y + b3 * pts[base + 3].y
     };
 }
 
 // TODO: (Part 2) Define a function that returns the curve's slope at t in [0, 1].
 Point2D getSlope(const std::vector<sf::Vector2f>& pts, float t) { 
+    // Same as getPoint
+    int numSegments = (static_cast<int>(pts.size()) - 1) / 3;
+    float scaled = t * numSegments;
+    int seg = static_cast<int>(scaled); // Cannot have fractional segments
+    if (seg >= numSegments) {
+        // when t == 1
+        seg = numSegments - 1;
+    }
+    float localT = scaled - seg;
+    int base = seg * 3;
+    
     // dx/dt = 3(1-t)^2*(P1.x - P0.x) + 6(1-t)t x (P2.x - P1.x) + 3t^2(P3.x - P2.x)
-    float u = 1.0f - t;
-    float dxdt = (3.0f * (u * u)) * (pts[1].x - pts[0].x) +
-                 (6.0f * u * t) * (pts[2].x - pts[1].x) +
-                 (3 * t * t) * (pts[3].x - pts[2].x);
+    float u = 1.0f - localT;
+    float dxdt = (3.0f * (u * u)) * (pts[base + 1].x - pts[base].x) +
+                 (6.0f * u * localT) * (pts[base + 2].x - pts[base + 1].x) +
+                 (3 * localT * localT) * (pts[base + 3].x - pts[base + 2].x);
     // dy/dt = 3(1-t)^2 * (P1.y - P0.y) + 6(1-t)t * (P2.y - P1.y) + 3t^2(P3.y - P2.y)
-    float dydt = (3.0f * (u * u)) * (pts[1].y - pts[0].y) +
-                 (6.0f * u * t) * (pts[2].y - pts[1].y) +
-                 (3.0f * t * t) * (pts[3].y - pts[2].y);
+    float dydt = (3.0f * (u * u)) * (pts[base + 1].y - pts[base].y) +
+                 (6.0f * u * localT) * (pts[base + 2].y - pts[base + 1].y) +
+                 (3.0f * localT * localT) * (pts[base + 3].y - pts[base + 2].y);
 
     return Point2D{dxdt, dydt}; 
 }
@@ -128,15 +151,58 @@ void handleInput(sf::Window& window, bool& shouldQuit) {
             }
         } else if (const auto* mouse = event->getIf<sf::Event::MouseMoved>()) {
             // TODO: (Part 3) Move the selected control point to mouse->position.
-            // TODO: (Part 4) Maintain matching slopes at shared endpoints.
-            // When moving point 3, move point 5 without changing its distance
-            // from point 4 (point numbers here start at 1).
             if (controlPointIndex != -1) {
                 pts[controlPointIndex] = Point2D(mouse->position);
+
+                // TODO: (Part 4) Maintain matching slopes at shared endpoints.
+                // When moving point 3, move point 5 without changing its distance
+                // from point 4 (point numbers here start at 1).
+                if (controlPointIndex == 2 && pts.size() >= 7) {
+                    Point2D joint = pts[3];
+
+                    // direction from the dragged point through the joint
+                    float dirX = joint.x - pts[2].x;
+                    float dirY = joint.y - pts[2].y;
+                    float dirLength = std::sqrt(dirX * dirX + dirY * dirY);
+
+                    // find how far point 4 already is from the joint
+                    float handleOffsetX = pts[4].x - joint.x;
+                    float handleOffsetY = pts[4].y - joint.y;
+                    float handleLength = std::sqrt(handleOffsetX * handleOffsetX + handleOffsetY * handleOffsetY);
+
+                    // Check to see if point 2 is exactly on point 4, then the length would be 0 (Division Error)
+                    if (dirLength > 0.0f) {
+                        pts[4] = { joint.x + dirX / dirLength * handleLength,
+                                   joint.y + dirY / dirLength * handleLength};
+                    }
+                }
             }
         } else if (const auto* key = event->getIf<sf::Event::KeyPressed>()) {
             // TODO: (Part 4) '+' adds three control points; '-' removes three,
             // keeping at least four points.
+            if (key->code == sf::Keyboard::Key::Add || key->code == sf::Keyboard::Key::Equal) {
+                // Get the last two points
+                Point2D last = pts.back();
+                Point2D prevHandle = pts[pts.size() - 2];
+                // continue in the same direction
+                Point2D dir = last - prevHandle;           
+                
+                // handle after the joint
+                Point2D p4 = last + dir * 0.25f;                   
+                Point2D p5 = p4 + Point2D{100.f, 0.f};
+                Point2D p6 = p5 + Point2D{100.f, 0.f};  
+                pts.push_back(p4);
+                pts.push_back(p5);
+                pts.push_back(p6);
+            }
+
+            if (key->code == sf::Keyboard::Key::Subtract || key->code == sf::Keyboard::Key::Hyphen) {
+                if (pts.size() > 4) {
+                    pts.resize(pts.size() - 3);
+                    // in case we were dragging a removed point
+                    controlPointIndex = -1;   
+                }
+            }
         }
     }
 }
@@ -149,7 +215,8 @@ void render(sf::RenderWindow& window) {
     // ====== ====== ======
     
     // Draw the curve first
-    const int segments = 100;
+    int numSegments = (static_cast<int>(pts.size()) - 1) / 3;
+    const int segments = 100 * numSegments;
     Point2D prev = getPoint(pts, 0.0f);
     for (int i = 1; i <= segments; ++i) {
         float t = static_cast<float>(i) / segments;
@@ -162,8 +229,10 @@ void render(sf::RenderWindow& window) {
     // TODO: (Part 3) Draw control handles from point 1 to 2 and point 3 to 4.
     // TODO: (Part 4) Draw all connected cubic Bezier segments and their handles.
     // ====== ====== ======
-    DrawLine(pts[0], pts[1], 1.0f, sf::Color::Red, window);
-    DrawLine(pts[2], pts[3], 1.0f, sf::Color::Red, window);
+    for (int k = 0; k < numSegments; ++k) {
+        DrawLine(pts[3 * k], pts[3 * k + 1], 1.0f, sf::Color::Red, window);
+        DrawLine(pts[3 * k + 2], pts[3 * k + 3], 1.0f, sf::Color::Red, window);
+    }
 
     // Draw the points as circles next
     const float r = 4.0f;
