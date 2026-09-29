@@ -44,6 +44,28 @@ void DrawLine(Point2D from, Point2D to, float width, sf::Color c, sf::RenderWind
 
 }
 
+// Helper function to find the closest control point based on where the mouse clicked
+// Returns the index of the closest point
+int findClosestControlPoint(const std::vector<sf::Vector2f>& pts, Point2D mouse) {
+    int best = 0;
+    // Initialize the first point (pts[0]) to be the closest for now
+    float bx = pts[0].x - mouse.x;
+    float by = pts[0].y - mouse.y;
+    float bestDist2 = bx * bx + by * by;
+
+    // Iterate through each pts to find the closest point
+    for (int i = 1; i < static_cast<int>(pts.size()); ++i) {
+        float dx = pts[i].x - mouse.x;
+        float dy = pts[i].y - mouse.y;
+        float d2 = dx * dx + dy * dy;
+        if (d2 < bestDist2) {
+            bestDist2 = d2;
+            best = i;
+        }
+    }
+    return best;
+}
+
 // TODO: (Part 1) Define a function that samples a cubic Bezier curve at t in [0, 1].
 Point2D getPoint(const std::vector<sf::Vector2f>& pts, float t) { 
     // B(t) = (1−t)^3xP0 + 3(1−t)^2txP1 + 3(1−t)t^2xP2 + t^3xP3
@@ -85,7 +107,7 @@ std::vector<sf::Vector2f> pts = {
 // TODO: (Part 2) Track animation time for the square moving along the curve.
 float animationTime = 0.0f;
 // TODO: (Part 3) Track the index of the control point being dragged.
-int controlPointIndex = 0;
+int controlPointIndex = -1;
 
 void handleInput(sf::Window& window, bool& shouldQuit) {
     while (const std::optional<sf::Event> event = window.pollEvent()) {
@@ -95,13 +117,23 @@ void handleInput(sf::Window& window, bool& shouldQuit) {
         } else if (const auto* mouse = event->getIf<sf::Event::MouseButtonPressed>()) {
             // TODO: (Part 3) On left-click, select the closest control point
             // using mouse->position and start dragging it.
+            if (mouse->button == sf::Mouse::Button::Left) {
+                Point2D m(mouse->position);
+                controlPointIndex = findClosestControlPoint(pts, m);
+            }
         } else if (const auto* mouse = event->getIf<sf::Event::MouseButtonReleased>()) {
             // TODO: (Part 3) On left-button release, stop dragging.
+            if (mouse->button == sf::Mouse::Button::Left) {
+                controlPointIndex = -1;
+            }
         } else if (const auto* mouse = event->getIf<sf::Event::MouseMoved>()) {
             // TODO: (Part 3) Move the selected control point to mouse->position.
             // TODO: (Part 4) Maintain matching slopes at shared endpoints.
             // When moving point 3, move point 5 without changing its distance
             // from point 4 (point numbers here start at 1).
+            if (controlPointIndex != -1) {
+                pts[controlPointIndex] = Point2D(mouse->position);
+            }
         } else if (const auto* key = event->getIf<sf::Event::KeyPressed>()) {
             // TODO: (Part 4) '+' adds three control points; '-' removes three,
             // keeping at least four points.
@@ -125,6 +157,13 @@ void render(sf::RenderWindow& window) {
         DrawLine(prev, cur, 2.0f, sf::Color::White, window);
         prev = cur;
     }
+
+    // ====== ====== ======
+    // TODO: (Part 3) Draw control handles from point 1 to 2 and point 3 to 4.
+    // TODO: (Part 4) Draw all connected cubic Bezier segments and their handles.
+    // ====== ====== ======
+    DrawLine(pts[0], pts[1], 1.0f, sf::Color::Red, window);
+    DrawLine(pts[2], pts[3], 1.0f, sf::Color::Red, window);
 
     // Draw the points as circles next
     const float r = 4.0f;
@@ -159,11 +198,6 @@ void render(sf::RenderWindow& window) {
     square.setRotation(sf::radians(angle));
 
     window.draw(square);
-
-    // ====== ====== ======
-    // TODO: (Part 3) Draw control handles from point 1 to 2 and point 3 to 4.
-    // TODO: (Part 4) Draw all connected cubic Bezier segments and their handles.
-    // ====== ====== ======
 
     // ====== ====== ======
     // TODO: (Bonus) Support multiple curves, a Galaga screen overlay at a 1:2 ratio, and exporting
