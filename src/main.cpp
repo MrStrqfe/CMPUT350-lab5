@@ -1,6 +1,7 @@
 #include <iostream>
 #include <optional>
 #include <vector>
+#include <cmath> // for sqrt
 
 #include <SFML/Graphics.hpp>
 
@@ -10,13 +11,66 @@ const int FPS_LIMIT = 30;
 
 using Point2D = sf::Vector2f;
 
+// My DrawLine Function from my Project, adjusted so that window is in the parameters now
+void DrawLine(Point2D from, Point2D to, float width, sf::Color c, sf::RenderWindow& window) {
+    float deltaX = to.x - from.x;
+    float deltaY = to.y - from.y;
+
+    float length = std::sqrt(deltaX * deltaX + deltaY * deltaY);
+    if (length == 0.0f) return;
+
+    // Perpendicular direction vector (Δy, -Δx), normalized and scaled to half-width
+    Point2D end = {
+        (deltaY / length) * (width / 2.f),
+        (-deltaX / length) * (width / 2.f)
+    };
+
+    Point2D p1Plus  = { from.x + end.x, from.y + end.y };
+    Point2D p1Minus = { from.x - end.x, from.y - end.y };
+    Point2D p2Plus  = { to.x + end.x,   to.y + end.y };
+    Point2D p2Minus = { to.x - end.x,   to.y - end.y };
+
+    // Now to draw the line
+    sf::ConvexShape line;
+    line.setPointCount(4);
+    line.setPoint(0, sf::Vector2f(p1Plus.x, p1Plus.y));
+    line.setPoint(1, sf::Vector2f(p2Plus.x, p2Plus.y));
+    line.setPoint(2, sf::Vector2f(p2Minus.x, p2Minus.y));
+    line.setPoint(3, sf::Vector2f(p1Minus.x, p1Minus.y));
+    line.setFillColor(c);
+
+    window.draw(line);
+
+
+}
+
 // TODO: (Part 1) Define a function that samples a cubic Bezier curve at t in [0, 1].
-Point2D getPoint(const std::vector<sf::Vector2f>& pts, float t) { return Point2D{}; }
+Point2D getPoint(const std::vector<sf::Vector2f>& pts, float t) { 
+    float u = 1.0f - t;
+
+    float b0 = u * u * u;
+    float b1 = 3.0f * u * u * t;
+    float b2 = 3.0f * u * t * t;
+    float b3 = t * t * t;
+
+    return Point2D{
+        b0 * pts[0].x + b1 * pts[1].x + b2 * pts[2].x + b3 * pts[3].x,
+        b0 * pts[0].y + b1 * pts[1].y + b2 * pts[2].y + b3 * pts[3].y
+    };
+}
 
 // TODO: (Part 2) Define a function that returns the curve's slope at t in [0, 1].
-Point2D getSlope(const std::vector<sf::Vector2f>& pts, float t) { return Point2D{}; }
+Point2D getSlope(const std::vector<sf::Vector2f>& pts, float t) { 
+    return Point2D{}; 
+}
 
 // TODO: (Part 1) Store four control points for the curve.
+std::vector<sf::Vector2f> pts = {
+    {100.f, 100.f},
+    {100.f, 300.f},
+    {300.f, 100.f},
+    {300.f, 300.f}
+};
 // TODO: (Part 2) Track animation time for the square moving along the curve.
 // TODO: (Part 3) Track the index of the control point being dragged.
 
@@ -48,6 +102,27 @@ void render(sf::RenderWindow& window) {
     // TODO: (Part 1) Sample GetPoint over t in [0, 1] and connect samples using the line-drawing
     // code from your project. Draw all four control points as circles after drawing the curve.
     // ====== ====== ======
+    
+    // Draw the curve first
+    const int segments = 100;
+    Point2D prev = getPoint(pts, 0.0f);
+    for (int i = 1; i <= segments; ++i) {
+        float t = static_cast<float>(i) / segments;
+        Point2D cur = getPoint(pts, t);
+        DrawLine(prev, cur, 2.0f, sf::Color::White, window);
+        prev = cur;
+    }
+
+    // Draw the points as circles next
+    const float r = 4.0f;
+    for (const auto& p : pts) {
+        sf::CircleShape dot(r);
+        dot.setFillColor(sf::Color::Cyan);
+        dot.setOrigin({r, r});
+        dot.setPosition(p);
+        window.draw(dot);
+    }
+
 
     // ====== ====== ======
     // TODO: (Part 2) Draw a small square moving repeatedly along the curve.
