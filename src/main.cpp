@@ -46,6 +46,7 @@ void DrawLine(Point2D from, Point2D to, float width, sf::Color c, sf::RenderWind
 
 // TODO: (Part 1) Define a function that samples a cubic Bezier curve at t in [0, 1].
 Point2D getPoint(const std::vector<sf::Vector2f>& pts, float t) { 
+    // B(t) = (1−t)^3xP0 + 3(1−t)^2txP1 + 3(1−t)t^2xP2 + t^3xP3
     float u = 1.0f - t;
 
     float b0 = u * u * u;
@@ -61,18 +62,30 @@ Point2D getPoint(const std::vector<sf::Vector2f>& pts, float t) {
 
 // TODO: (Part 2) Define a function that returns the curve's slope at t in [0, 1].
 Point2D getSlope(const std::vector<sf::Vector2f>& pts, float t) { 
-    return Point2D{}; 
+    // dx/dt = 3(1-t)^2*(P1.x - P0.x) + 6(1-t)t x (P2.x - P1.x) + 3t^2(P3.x - P2.x)
+    float u = 1.0f - t;
+    float dxdt = (3.0f * (u * u)) * (pts[1].x - pts[0].x) +
+                 (6.0f * u * t) * (pts[2].x - pts[1].x) +
+                 (3 * t * t) * (pts[3].x - pts[2].x);
+    // dy/dt = 3(1-t)^2 * (P1.y - P0.y) + 6(1-t)t * (P2.y - P1.y) + 3t^2(P3.y - P2.y)
+    float dydt = (3.0f * (u * u)) * (pts[1].y - pts[0].y) +
+                 (6.0f * u * t) * (pts[2].y - pts[1].y) +
+                 (3.0f * t * t) * (pts[3].y - pts[2].y);
+
+    return Point2D{dxdt, dydt}; 
 }
 
 // TODO: (Part 1) Store four control points for the curve.
 std::vector<sf::Vector2f> pts = {
     {100.f, 100.f},
-    {100.f, 300.f},
-    {300.f, 100.f},
-    {300.f, 300.f}
+    {100.f, 500.f},
+    {500.f, 100.f},
+    {500.f, 500.f}
 };
 // TODO: (Part 2) Track animation time for the square moving along the curve.
+float animationTime = 0.0f;
 // TODO: (Part 3) Track the index of the control point being dragged.
+int controlPointIndex = 0;
 
 void handleInput(sf::Window& window, bool& shouldQuit) {
     while (const std::optional<sf::Event> event = window.pollEvent()) {
@@ -123,11 +136,29 @@ void render(sf::RenderWindow& window) {
         window.draw(dot);
     }
 
-
     // ====== ====== ======
     // TODO: (Part 2) Draw a small square moving repeatedly along the curve.
     // Use GetSlope to orient it to the curve at each time step.
     // ====== ====== ======
+    // 100 frames at 30 FPS will be about 3.3 seconds per loop
+    animationTime += 0.01f;
+    if (animationTime > 1.0f) {
+        animationTime = 0.0f;
+    }
+
+    Point2D pos = getPoint(pts, animationTime);
+
+    sf::RectangleShape square({16.0f, 16.0f});
+    square.setOrigin({8.0f, 8.0f});
+    square.setPosition(pos);
+    square.setFillColor(sf::Color::Yellow);
+
+    // Adjust for rotations
+    Point2D slope = getSlope(pts, animationTime);
+    float angle = std::atan2(slope.y, slope.x);
+    square.setRotation(sf::radians(angle));
+
+    window.draw(square);
 
     // ====== ====== ======
     // TODO: (Part 3) Draw control handles from point 1 to 2 and point 3 to 4.
